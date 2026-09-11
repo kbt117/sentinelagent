@@ -1,0 +1,11 @@
+# Ensure shell scripts keep LF line endings (required for gradlew on Unix/Android/CoGo)
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.kt text
+*.xml text
+*.kts text
+*.toml text
+*.properties text
+*.md text
+*.jar binary

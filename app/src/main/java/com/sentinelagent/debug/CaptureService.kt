@@ -121,31 +121,33 @@ class CaptureService : Service() {
 
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            startForeground(
-                                NOTIFICATION_ID,
-                                notification,
-                                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or
-                                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
-                                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                            )
-                        } else {
-                            startForeground(
-                                NOTIFICATION_ID,
-                                notification,
-                                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or
-                                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-                            )
+                        // Match AndroidManifest foregroundServiceType exactly
+                        // (mediaProjection | microphone | camera). specialUse is not used.
+                        var fgsType =
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        if (micEnabled) {
+                            fgsType = fgsType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                         }
+                        if (cameraMode != CAMERA_OFF) {
+                            fgsType = fgsType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                        }
+                        startForeground(NOTIFICATION_ID, notification, fgsType)
                     } else {
                         startForeground(NOTIFICATION_ID, notification)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to start foreground: ${e.message}")
                     try {
-                        startForeground(NOTIFICATION_ID, notification)
+                        // Fallback: media projection alone (always required for this service)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            startForeground(
+                                NOTIFICATION_ID,
+                                notification,
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                            )
+                        } else {
+                            startForeground(NOTIFICATION_ID, notification)
+                        }
                     } catch (e2: Exception) {
                         Log.e(TAG, "Critical: cannot start foreground: ${e2.message}")
                     }

@@ -2,35 +2,83 @@
 
 **Package:** `com.sentinelagent.debug`  
 **Min SDK:** 26 (Android 8.0 Oreo)  
-**Target SDK:** 34 (Android 14)  
+**Target / Compile SDK:** 34 (Android 14)  
 **Language:** Kotlin  
-**Build System:** Gradle with Kotlin DSL  
+**Build system:** Gradle 8.6 + AGP 8.3.2 (Kotlin DSL, version catalog)
+
+Compatible with **Code on the Go (CoGo)** on Android (AGP 7.3–8.11, Kotlin ~1.9.x).
 
 ---
 
 ## Overview
 
-SentinelAgent is a foreground-service-based Android debug app that periodically captures:
+SentinelAgent is a foreground-service Android debug app that periodically captures:
 
-- **Screenshots** — via MediaProjection API + VirtualDisplay + ImageReader
-- **Camera Stills** — via Camera2 API (front or rear camera)
-- **Microphone Audio** — via AudioRecord, chunked into 5-second WAV files
-- **Sensor Data** — accelerometer, gyroscope, light, proximity via SensorManager
+- **Screenshots** — MediaProjection + VirtualDisplay + ImageReader
+- **Camera stills** — Camera2 API (front or rear)
+- **Microphone audio** — AudioRecord, 5-second WAV chunks @ 16 kHz mono
+- **Sensor data** — accelerometer, gyroscope, light, proximity
 
-All captured data is uploaded to a configurable HTTPS endpoint using OkHttp.
+Captured data is uploaded to a configurable HTTPS endpoint with OkHttp (multipart for media, JSON for sensors).
 
 ---
 
-## Project Structure
+## Clone and build in Code on the Go (Android)
+
+1. Install [Code on the Go](https://appdevforall.org/code-on-the-go/) (release 26.37 or newer).
+2. Clone this repository from CoGo (Git → Clone) or copy the project folder onto the device.
+3. Open the project root (the folder that contains `settings.gradle.kts` and `gradlew`).
+4. Let CoGo sync Gradle. On first build it downloads the Gradle 8.6 distribution and dependencies (needs network once).
+5. Build **Debug** and run/install on the device.
+
+CLI equivalent inside CoGo’s terminal (or any machine with the Android SDK):
+
+```bash
+chmod +x gradlew
+./gradlew assembleDebug
+# APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew installDebug   # if a device/emulator is attached
+```
+
+### CoGo notes
+
+| Item | This project |
+|---|---|
+| AGP | `8.3.2` (within CoGo’s 7.3.0–8.11.0 range) |
+| Gradle | `8.6` (wrapper included: `gradlew` + `gradle-wrapper.jar`) |
+| Kotlin | `1.9.22` (aligned with CoGo’s ~1.9.2 toolchain) |
+| JDK | Java 17 language level (CoGo ships JDK 21) |
+| `local.properties` | **Not committed.** CoGo / Android Studio create `sdk.dir` automatically. |
+| RAM | `gradle.properties` caps the daemon at ~1.5 GB for on-device builds. |
+
+> **Upcoming CoGo toolchain (Sept 2026):** a later CoGo release moves to Gradle 9.6 / AGP 9.3 / Kotlin 2.3. Do **not** apply that migration until you upgrade CoGo itself. See the [CoGo migration guide](https://github.com/appdevforall/CodeOnTheGo/wiki/IMPORTANT:-Fix-project-breaking-changes-after-the-Gradle-AGP-Kotlin-toolchain-upgrade).
+
+---
+
+## Build with Android Studio (desktop)
+
+1. Open the project in Android Studio Hedgehog (2023.1.1) or newer.
+2. Ensure `local.properties` contains a valid `sdk.dir=...` (Studio writes this on open).
+3. Sync Gradle → **Build → Make Project**, or:
+
+```bash
+./gradlew assembleDebug
+```
+
+---
+
+## Project structure
 
 ```
 SentinelAgent/
 ├── settings.gradle.kts
 ├── build.gradle.kts
 ├── gradle.properties
+├── gradlew / gradlew.bat
 ├── gradle/
 │   ├── libs.versions.toml
 │   └── wrapper/
+│       ├── gradle-wrapper.jar
 │       └── gradle-wrapper.properties
 └── app/
     ├── build.gradle.kts
@@ -38,77 +86,20 @@ SentinelAgent/
     └── src/main/
         ├── AndroidManifest.xml
         ├── java/com/sentinelagent/debug/
-        │   ├── MainActivity.kt          — UI + permission handling
-        │   ├── CaptureService.kt        — Foreground service, orchestration
-        │   ├── UploadManager.kt         — OkHttp uploads with retry
-        │   ├── ScreenCaptureManager.kt  — MediaProjection screen capture
-        │   ├── CameraCaptureManager.kt  — Camera2 still capture
-        │   ├── AudioCaptureManager.kt   — AudioRecord + WAV chunking
-        │   ├── SensorCaptureManager.kt  — SensorManager data collection
-        │   └── NotificationHelper.kt    — Persistent notification
+        │   ├── MainActivity.kt
+        │   ├── CaptureService.kt
+        │   ├── UploadManager.kt
+        │   ├── ScreenCaptureManager.kt
+        │   ├── CameraCaptureManager.kt
+        │   ├── AudioCaptureManager.kt
+        │   ├── SensorCaptureManager.kt
+        │   └── NotificationHelper.kt
         └── res/
             ├── layout/activity_main.xml
-            ├── values/strings.xml
-            ├── values/themes.xml
-            ├── values/colors.xml
-            ├── drawable/ic_notification.xml
-            ├── drawable/ic_launcher_background.xml
-            ├── drawable/ic_launcher_foreground.xml
-            └── mipmap-*/ic_launcher*.xml
+            ├── values/{strings,themes,colors}.xml
+            ├── drawable/
+            └── mipmap-anydpi-v26/
 ```
-
----
-
-## Architecture
-
-### MainActivity
-- Displays configuration UI (server URL, interval, camera mode, mic/sensor toggles)
-- Requests all necessary runtime permissions
-- Launches MediaProjection permission dialog (required for screen capture)
-- Starts/stops `CaptureService` via explicit intents
-
-### CaptureService (Foreground Service)
-- Type: `mediaProjection | microphone | camera | specialUse`
-- Runs persistent notification via `NotificationHelper`
-- Initializes all capture managers
-- Runs 4 independent coroutine loops:
-  - **Screenshot loop** — every N seconds
-  - **Camera loop** — every N seconds (if enabled)
-  - **Audio loop** — checks every 1 second for completed 5-second WAV chunks
-  - **Sensor loop** — every N seconds (if enabled)
-
-### UploadManager (Singleton)
-- Uses OkHttp with 30s connect / 60s read/write timeouts
-- Multipart form-data for images (JPEG quality 80) and audio (WAV)
-- JSON body for sensor data
-- 3 retries with exponential backoff: 1s → 2s → 4s
-- All uploads on `Dispatchers.IO`
-
-### ScreenCaptureManager
-- Wraps `MediaProjection` + `VirtualDisplay` + `ImageReader`
-- Format: `PixelFormat.RGBA_8888`
-- Handles row stride padding correctly
-- Returns `Bitmap?` — caller must recycle
-
-### CameraCaptureManager
-- Camera2 API with background `HandlerThread`
-- Finds camera by facing direction (front/rear)
-- Uses `TEMPLATE_STILL_CAPTURE` for single stills
-- Semaphore-based synchronization for capture completion
-- Properly closes camera + releases resources on stop
-
-### AudioCaptureManager
-- `AudioRecord` with 16kHz, Mono, PCM_16BIT
-- Background recording thread accumulates PCM data
-- When 160,000 bytes (5 seconds) accumulate, converts to WAV
-- WAV header: standard 44-byte PCM WAV (little-endian)
-- `getAudioChunk()` returns and clears latest chunk (no re-upload)
-
-### SensorCaptureManager
-- Registers listeners for 4 sensor types
-- Stores latest readings in `ConcurrentHashMap<Int, SensorReading>`
-- `getSensorDataJson()` builds JSON with all available sensor readings
-- Gracefully handles absent sensors (e.g., no gyroscope on some devices)
 
 ---
 
@@ -117,91 +108,67 @@ SentinelAgent/
 | Permission | Purpose |
 |---|---|
 | `INTERNET` | Upload data to server |
-| `FOREGROUND_SERVICE` | Run persistent service |
-| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Android 14+ screen capture |
-| `FOREGROUND_SERVICE_MICROPHONE` | Android 10+ mic in foreground |
-| `FOREGROUND_SERVICE_CAMERA` | Android 10+ camera in foreground |
-| `FOREGROUND_SERVICE_SPECIAL_USE` | Fallback for older Android |
+| `FOREGROUND_SERVICE` | Persistent capture service |
+| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | Screen capture FGS (Android 14+) |
+| `FOREGROUND_SERVICE_MICROPHONE` | Mic FGS |
+| `FOREGROUND_SERVICE_CAMERA` | Camera FGS |
 | `RECORD_AUDIO` | Microphone capture |
-| `CAMERA` | Camera still capture |
-| `POST_NOTIFICATIONS` | Android 13+ notification permission |
-| `WAKE_LOCK` | Keep CPU alive during capture |
+| `CAMERA` | Camera stills |
+| `POST_NOTIFICATIONS` | Notification on Android 13+ |
+| `WAKE_LOCK` | Keep CPU awake during capture |
+| `ACCESS_NETWORK_STATE` | Connectivity checks |
+
+Runtime grants: camera, mic, notifications. Screen capture uses the system MediaProjection consent dialog.
 
 ---
 
-## Upload API Format
+## Upload API
 
-### Screenshot / Camera Still
+### Screenshot / camera still
+
 ```
 POST <server_url>
 Content-Type: multipart/form-data
 
-device_id: <android_id>
-type: "screenshot" | "camera"
-timestamp: <epoch_millis>
-image: <filename.jpg> (JPEG, quality 80)
+device_id, type ("screenshot"|"camera"), timestamp, image (JPEG q=80)
 ```
 
-### Audio Chunk
+### Audio chunk
+
 ```
 POST <server_url>
 Content-Type: multipart/form-data
 
-device_id: <android_id>
-type: "audio"
-timestamp: <epoch_millis>
-audio: chunk.wav (WAV, 16kHz mono PCM_16BIT, ~5 seconds)
+device_id, type ("audio"), timestamp, audio (WAV 16 kHz mono PCM, ~5 s)
 ```
 
-### Sensor Data
+### Sensor data
+
 ```
 POST <server_url>
 Content-Type: application/json
 
 {
-  "device_id": "abc123",
+  "device_id": "...",
   "type": "sensors",
   "timestamp": 1700000000000,
-  "sensors": {
-    "accelerometer": {"x": 0.1, "y": 0.2, "z": 9.8, "accuracy": 3},
-    "gyroscope": {"x": 0.01, "y": 0.02, "z": 0.03, "accuracy": 3},
-    "light": {"lux": 450.0, "accuracy": 3},
-    "proximity": {"distance_cm": 5.0, "accuracy": 3}
-  }
+  "sensors": { "accelerometer": {...}, "gyroscope": {...}, ... }
 }
 ```
 
 ---
 
-## Build Instructions
+## Testing checklist
 
-1. Open in Android Studio Hedgehog (2023.1.1) or newer
-2. Ensure `local.properties` has valid `sdk.dir` path
-3. Sync Gradle
-4. Build: `./gradlew assembleDebug`
-5. Install: `./gradlew installDebug`
-
----
-
-## Testing Checklist
-
-- [ ] Grant all permissions on first run
-- [ ] Screen capture permission dialog appears
-- [ ] Notification appears with "Stop" action button
-- [ ] Upload server receives multipart POST for screenshots
-- [ ] Upload server receives multipart POST for camera images
-- [ ] Upload server receives WAV files for audio chunks
-- [ ] Upload server receives JSON for sensor data
-- [ ] Stop button in notification stops all capture loops
-- [ ] Stop button in app UI stops service
-- [ ] App survives screen rotation
-- [ ] App survives going to background
+- [ ] Grant runtime permissions on first run
+- [ ] MediaProjection dialog appears and is accepted
+- [ ] Persistent notification shows with **Stop**
+- [ ] Server receives screenshot / camera / audio / sensor uploads
+- [ ] Stop from notification and from app UI both halt capture
+- [ ] Survives rotation and backgrounding
 
 ---
 
-## ⚠️ Legal Notice
+## Legal notice
 
-This app captures sensitive device data including screen content, camera images,
-audio, and location-adjacent sensor data. Use only on devices you own or have
-explicit authorization to monitor. Unauthorized use may violate privacy laws
-including GDPR, CCPA, CFAA, and local equivalents.
+This app captures sensitive device data (screen, camera, audio, sensors). Use only on devices you own or are explicitly authorized to monitor. Unauthorized use may violate privacy laws including GDPR, CCPA, CFAA, and local equivalents.
