@@ -1,8 +1,10 @@
 [versions]
+# CoGo (Code on the Go) supports AGP 7.3.0–8.11.0 and ships Kotlin ~1.9.2
 agp = "8.3.2"
-kotlin = "1.9.23"
+kotlin = "1.9.22"
 coreKtx = "1.13.1"
 appcompat = "1.7.0"
+activity = "1.9.0"
 material = "1.12.0"
 cardview = "1.0.0"
 okhttp = "4.12.0"
@@ -11,6 +13,7 @@ coroutines = "1.8.1"
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activity" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-cardview = { group = "androidx.cardview", name = "cardview", version.ref = "cardview" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

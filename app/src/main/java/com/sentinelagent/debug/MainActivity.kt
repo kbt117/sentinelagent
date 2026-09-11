@@ -157,10 +157,8 @@ class MainActivity : AppCompatActivity() {
             permissionsNeeded.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        // FOREGROUND_SERVICE_MEDIA_PROJECTION for Android 14+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            permissionsNeeded.add(Manifest.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION)
-        }
+        // FOREGROUND_SERVICE_* permissions are normal (install-time) on API 34+;
+        // do not request them at runtime.
 
         // Filter out already-granted permissions
         val notGranted = permissionsNeeded.filter {

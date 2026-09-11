@@ -7,7 +7,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- Capture permissions -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -22,7 +21,7 @@
     <!-- Wake lock to keep CPU running during capture -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Camera hardware feature declaration (not required) -->
+    <!-- Camera / mic hardware features are optional so the APK installs on emulators -->
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
@@ -53,11 +52,16 @@
             </intent-filter>
         </activity>
 
+        <!--
+            FGS types match the three capture modes. specialUse is intentionally omitted:
+            Android 14+ requires a PROPERTY_SPECIAL_USE_FGS_SUBTYPE when it is declared,
+            and mediaProjection|microphone|camera already cover this app's needs.
+        -->
         <service
             android:name=".CaptureService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection|microphone|camera|specialUse" />
+            android:foregroundServiceType="mediaProjection|microphone|camera" />
 
     </application>
 

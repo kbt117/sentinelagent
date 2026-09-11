@@ -20,7 +20,8 @@ object UploadManager {
     private const val MAX_RETRIES = 3
     private const val BASE_BACKOFF_MS = 1000L
 
-    private lateinit var deviceId: String
+    @Volatile
+    private var deviceId: String = "unknown_device"
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
