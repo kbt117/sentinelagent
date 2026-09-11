@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SentinelAgent</string>
+    <string name="subtitle">Device monitoring and data capture</string>
+
+    <!-- Labels -->
+    <string name="label_server_url">SERVER ENDPOINT URL</string>
+    <string name="label_interval">UPLOAD INTERVAL</string>
+    <string name="label_capture_modes">CAPTURE CONFIGURATION</string>
+    <string name="label_camera">Camera Capture</string>
+    <string name="label_microphone">Microphone Capture</string>
+    <string name="label_sensors">Sensor Data</string>
+    <string name="label_status">Status:</string>
+
+    <!-- Descriptions -->
+    <string name="desc_camera">Select camera or disable</string>
+    <string name="desc_microphone">Record 5-second WAV chunks at 16kHz</string>
+    <string name="desc_sensors">Accel, gyro, light, proximity at 200ms</string>
+
+    <!-- Hints -->
+    <string name="hint_server_url">https://example.com/upload</string>
+    <string name="hint_interval">Upload interval in seconds</string>
+
+    <!-- Defaults -->
+    <string name="default_server_url">https://example.com/upload</string>
+    <string name="default_interval">10</string>
+
+    <!-- Camera spinner options -->
+    <string-array name="camera_options">
+        <item>Off</item>
+        <item>Front Camera</item>
+        <item>Rear Camera</item>
+    </string-array>
+
+    <!-- Buttons -->
+    <string name="btn_start">▶  Start Monitoring</string>
+    <string name="btn_stop">⏹  Stop Monitoring</string>
+
+    <!-- Status messages -->
+    <string name="status_not_running">Not running</string>
+    <string name="status_running">Monitoring active</string>
+    <string name="status_starting">Starting…</string>
+    <string name="status_stopping">Stopping…</string>
+
+    <!-- Notification -->
+    <string name="notification_title">SentinelAgent Monitoring</string>
+    <string name="notification_text">Capturing screen, camera, mic, sensors</string>
+    <string name="notification_action_stop">Stop</string>
+    <string name="notification_channel_name">SentinelAgent Monitoring</string>
+
+    <!-- Errors -->
+    <string name="error_url_empty">Server URL is required</string>
+    <string name="error_interval_invalid">Please enter a valid positive integer</string>
+    <string name="error_permission_denied">Permission denied. Please grant all required permissions.</string>
+    <string name="error_projection_denied">Screen capture permission is required to start monitoring.</string>
+
+    <!-- Footer -->
+    <string name="footer_note">SentinelAgent v1.0 — For authorized debug use only</string>
+</resources>

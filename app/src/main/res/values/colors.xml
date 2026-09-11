@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary -->
+    <color name="primary">#1A237E</color>
+    <color name="primary_dark">#0D1452</color>
+    <color name="primary_light">#534BAE</color>
+
+    <!-- Accent -->
+    <color name="accent">#00BCD4</color>
+    <color name="accent_dark">#0097A7</color>
+
+    <!-- Background -->
+    <color name="background">#F5F7FA</color>
+    <color name="card_background">#FFFFFF</color>
+
+    <!-- Text -->
+    <color name="text_primary">#1A1A2E</color>
+    <color name="text_secondary">#6B7280</color>
+
+    <!-- Utility -->
+    <color name="white">#FFFFFF</color>
+    <color name="divider">#E5E7EB</color>
+    <color name="success">#10B981</color>
+    <color name="error">#EF4444</color>
+    <color name="warning">#F59E0B</color>
+</resources>

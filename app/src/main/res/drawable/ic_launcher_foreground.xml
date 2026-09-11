@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shield / eye icon for launcher — centered in safe zone (72dp inner area) -->
+
+    <!-- Outer shield body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,18 L76,28 L76,50 C76,64 65,74 54,78 C43,74 32,64 32,50 L32,28 Z" />
+
+    <!-- Inner shield cutout (dark blue) -->
+    <path
+        android:fillColor="#1A237E"
+        android:pathData="M54,24 L72,33 L72,50 C72,62 62,70 54,74 C46,70 36,62 36,50 L36,33 Z" />
+
+    <!-- Eye shape (white) -->
+    <ellipse
+        android:fillColor="#FFFFFF"
+        android:cx="54"
+        android:cy="52"
+        android:rx="12"
+        android:ry="8" />
+
+    <!-- Pupil (dark blue) -->
+    <circle
+        android:fillColor="#1A237E"
+        android:cx="54"
+        android:cy="52"
+        android:r="4" />
+
+    <!-- Pupil highlight (white) -->
+    <circle
+        android:fillColor="#FFFFFF"
+        android:cx="56"
+        android:cy="50"
+        android:r="1.5" />
+
+</vector>
