@@ -2,7 +2,10 @@ package com.sentinelagent.debug
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -95,33 +98,72 @@ class MainActivity : AppCompatActivity() {
             onStopClicked()
         }
 
-        // Register broadcast receiver to update UI when service stops
-        val stopFilter = android.content.IntentFilter(CaptureService.ACTION_SERVICE_STOPPED)
+        // Register broadcast receiver for service state updates
+        // (started / stopped / error / status messages)
+        val stateFilter = IntentFilter().apply {
+            addAction(CaptureService.ACTION_SERVICE_STARTED)
+            addAction(CaptureService.ACTION_SERVICE_STOPPED)
+            addAction(CaptureService.ACTION_SERVICE_ERROR)
+            addAction(CaptureService.ACTION_SERVICE_STATUS)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(serviceStoppedReceiver, stopFilter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(serviceStateReceiver, stateFilter, RECEIVER_NOT_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(serviceStoppedReceiver, stopFilter)
+            registerReceiver(serviceStateReceiver, stateFilter)
         }
     }
 
-    private val serviceStoppedReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-            Log.d(TAG, "Received service stopped broadcast")
-            setStoppedUiState()
+    private val serviceStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val message = intent?.getStringExtra(CaptureService.EXTRA_STATUS_MESSAGE)
+            Log.d(TAG, "Service state broadcast: action=${intent?.action}, message=$message")
+            when (intent?.action) {
+                CaptureService.ACTION_SERVICE_STARTED -> setRunningUiState()
+                CaptureService.ACTION_SERVICE_STOPPED -> setStoppedUiState(message)
+                CaptureService.ACTION_SERVICE_ERROR -> {
+                    setStoppedUiState(message ?: "Start failed")
+                    Toast.makeText(
+                        this@MainActivity,
+                        message ?: "Capture failed to start",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                CaptureService.ACTION_SERVICE_STATUS -> {
+                    // Non-fatal note while running (e.g. one capture mode unavailable)
+                    if (message != null) tvStatus.text = message
+                }
+            }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         try {
-            unregisterReceiver(serviceStoppedReceiver)
+            unregisterReceiver(serviceStateReceiver)
         } catch (e: Exception) {
             Log.w(TAG, "Error unregistering receiver: ${e.message}")
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-sync the status card with the real service state (e.g. after the
+        // consent dialog or permission dialogs put us in the background)
+        if (CaptureService.isRunning) {
+            setRunningUiState()
+        } else {
+            setStoppedUiState()
+        }
+    }
+
     private fun onStartClicked() {
+        // Nothing to do if the service is already up
+        if (CaptureService.isRunning) {
+            setRunningUiState()
+            return
+        }
+
         // Validate inputs
         val serverUrl = etServerUrl.text.toString().trim()
         if (serverUrl.isEmpty()) {
@@ -228,7 +270,11 @@ class MainActivity : AppCompatActivity() {
             startService(serviceIntent)
         }
 
-        setRunningUiState()
+        // Don't claim "Monitoring active" yet — the service confirms with an
+        // ACTION_SERVICE_STARTED broadcast once startForeground() and
+        // getMediaProjection() have actually succeeded. If it fails, an
+        // ACTION_SERVICE_ERROR broadcast shows the real reason here instead.
+        setStartingUiState()
     }
 
     private fun onStopClicked() {
@@ -240,17 +286,27 @@ class MainActivity : AppCompatActivity() {
         setStoppedUiState()
     }
 
+    private fun setStartingUiState() {
+        btnStart.isEnabled = false
+        btnStop.isEnabled = false
+        tvStatus.text = getString(R.string.status_starting)
+        tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+    }
+
     private fun setRunningUiState() {
         btnStart.isEnabled = false
         btnStop.isEnabled = true
-        tvStatus.text = "Monitoring active"
+        tvStatus.text = getString(R.string.status_running)
         tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
     }
 
-    private fun setStoppedUiState() {
+    private fun setStoppedUiState(message: String? = null) {
         btnStart.isEnabled = true
         btnStop.isEnabled = false
-        tvStatus.text = "Not running"
-        tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+        tvStatus.text = message ?: getString(R.string.status_not_running)
+        tvStatus.setTextColor(
+            if (message != null) ContextCompat.getColor(this, android.R.color.holo_red_dark)
+            else ContextCompat.getColor(this, android.R.color.darker_gray)
+        )
     }
 }
