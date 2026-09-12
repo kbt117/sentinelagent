@@ -20,8 +20,23 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "SentinelAgent"
-        private const val REQUEST_MEDIA_PROJECTION = 1001
     }
+
+    /**
+     * Config snapshot taken when Start is tapped, consumed when the
+     * MediaProjection consent dialog returns. Stashed in memory (never on
+     * disk) so the service starts with exactly what the user confirmed, even
+     * if the activity is recreated while the system dialog is showing.
+     */
+    private data class PendingStartConfig(
+        val serverUrl: String,
+        val intervalSeconds: Int,
+        val cameraMode: String,
+        val micEnabled: Boolean,
+        val sensorsEnabled: Boolean
+    )
+
+    private var pendingStartConfig: PendingStartConfig? = null
 
     // UI references
     private lateinit var etServerUrl: EditText
@@ -35,6 +50,33 @@ class MainActivity : AppCompatActivity() {
 
     // MediaProjection manager
     private lateinit var mediaProjectionManager: MediaProjectionManager
+
+    // MediaProjection consent launcher. A FRESH consent dialog is shown for
+    // every capture session: the granted Intent/resultCode token is valid only
+    // in this process and only for one getMediaProjection() call, so it is
+    // handed straight to CaptureService and never cached or persisted.
+    private val projectionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            Log.d(TAG, "MediaProjection permission granted")
+            val config = pendingStartConfig
+            pendingStartConfig = null
+            if (config == null) {
+                Log.w(TAG, "Consent granted but no pending start config — ignoring")
+                setStoppedUiState(getString(R.string.status_not_running))
+                Toast.makeText(this, "Tap Start again to begin monitoring", Toast.LENGTH_SHORT).show()
+            } else {
+                startCaptureService(result.resultCode, data, config)
+            }
+        } else {
+            Log.w(TAG, "MediaProjection permission denied or cancelled")
+            pendingStartConfig = null
+            setStoppedUiState(getString(R.string.error_projection_denied))
+            Toast.makeText(this, R.string.error_projection_denied, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Permission launcher for multiple permissions
     private val permissionLauncher = registerForActivityResult(
@@ -148,12 +190,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Re-sync the status card with the real service state (e.g. after the
-        // consent dialog or permission dialogs put us in the background)
+        // Re-sync the buttons with the real service state. The status TEXT is
+        // intentionally left alone when stopped: onResume fires right after
+        // the consent/permission dialogs close, and must not wipe the
+        // explanation they (or a service broadcast) just set.
         if (CaptureService.isRunning) {
             setRunningUiState()
         } else {
-            setStoppedUiState()
+            btnStart.isEnabled = true
+            btnStop.isEnabled = false
+            if (tvStatus.text.isNullOrEmpty()) {
+                setStoppedUiState()
+            }
         }
     }
 
@@ -217,49 +265,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchMediaProjectionRequest() {
-        Log.d(TAG, "Launching MediaProjection permission request")
-        val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
-        @Suppress("DEPRECATION")
-        startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
+        // Snapshot the current UI config so the consent result starts exactly
+        // this session, even if the activity is recreated while the system
+        // dialog is showing. The consent token itself is never cached or
+        // written to disk — it lives only for this one session start.
+        pendingStartConfig = PendingStartConfig(
+            serverUrl = etServerUrl.text.toString().trim(),
+            intervalSeconds = etInterval.text.toString().trim().toIntOrNull() ?: 10,
+            cameraMode = when (spinnerCamera.selectedItemPosition) {
+                1 -> CaptureService.CAMERA_FRONT
+                2 -> CaptureService.CAMERA_REAR
+                else -> CaptureService.CAMERA_OFF
+            },
+            micEnabled = switchMic.isChecked,
+            sensorsEnabled = switchSensors.isChecked
+        )
+        Log.d(TAG, "Launching MediaProjection permission request (fresh consent)")
+        projectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_MEDIA_PROJECTION) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                Log.d(TAG, "MediaProjection permission granted")
-                startCaptureService(resultCode, data)
-            } else {
-                Log.w(TAG, "MediaProjection permission denied or cancelled")
-                tvStatus.text = "Screen capture permission denied"
-                Toast.makeText(this, "Screen capture permission is required", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun startCaptureService(resultCode: Int, projectionData: Intent) {
-        val serverUrl = etServerUrl.text.toString().trim()
-        val intervalSeconds = etInterval.text.toString().trim().toIntOrNull() ?: 10
-        val cameraMode = when (spinnerCamera.selectedItemPosition) {
-            1 -> CaptureService.CAMERA_FRONT
-            2 -> CaptureService.CAMERA_REAR
-            else -> CaptureService.CAMERA_OFF
-        }
-        val micEnabled = switchMic.isChecked
-        val sensorsEnabled = switchSensors.isChecked
-
-        Log.d(TAG, "Starting CaptureService: url=$serverUrl, interval=$intervalSeconds, " +
-                "camera=$cameraMode, mic=$micEnabled, sensors=$sensorsEnabled")
+    private fun startCaptureService(
+        resultCode: Int,
+        projectionData: Intent,
+        config: PendingStartConfig
+    ) {
+        Log.d(TAG, "Starting CaptureService: url=${config.serverUrl}, " +
+                "interval=${config.intervalSeconds}, camera=${config.cameraMode}, " +
+                "mic=${config.micEnabled}, sensors=${config.sensorsEnabled}")
 
         val serviceIntent = Intent(this, CaptureService::class.java).apply {
             action = CaptureService.ACTION_START
-            putExtra(CaptureService.EXTRA_SERVER_URL, serverUrl)
-            putExtra(CaptureService.EXTRA_INTERVAL_SECONDS, intervalSeconds)
-            putExtra(CaptureService.EXTRA_CAMERA_MODE, cameraMode)
-            putExtra(CaptureService.EXTRA_MIC_ENABLED, micEnabled)
-            putExtra(CaptureService.EXTRA_SENSORS_ENABLED, sensorsEnabled)
+            putExtra(CaptureService.EXTRA_SERVER_URL, config.serverUrl)
+            putExtra(CaptureService.EXTRA_INTERVAL_SECONDS, config.intervalSeconds)
+            putExtra(CaptureService.EXTRA_CAMERA_MODE, config.cameraMode)
+            putExtra(CaptureService.EXTRA_MIC_ENABLED, config.micEnabled)
+            putExtra(CaptureService.EXTRA_SENSORS_ENABLED, config.sensorsEnabled)
             putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode)
             putExtra(CaptureService.EXTRA_PROJECTION_DATA, projectionData)
         }

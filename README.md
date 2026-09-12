@@ -170,12 +170,18 @@ failure is reported there (in red) instead of crashing silently:
 | `Not running` | Service is stopped (or was never started) |
 | `Start failed: <message>` | The service could not start — the message is the actual exception (e.g. `Media projections require a foreground service...`) |
 | `Screen capture unavailable: <message>` | Service is running, but the screen VirtualDisplay could not be created (other captures continue) |
-| `Screen capture ended` | The projection was stopped by the system (cast chip, lock screen on Android 15+) |
+| `Screen capture ended — tap Start ...` | The projection was stopped (share chip, lock screen on Android 15+). Tap **Start** and accept the system dialog again — see below |
 
 Android 14+ (targetSdk 34) requires this exact order: user accepts the
 **Share screen** dialog → `startForegroundService()` → the service calls
 `startForeground()` with `FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION` → only
 then `getMediaProjection()`. Any deviation throws `SecurityException`.
+
+MediaProjection consent is **single-session**: every Start shows a fresh
+system dialog, and the granted token is used once and never cached or
+persisted (it is valid only in the current process). When the projection
+ends, the old token is dead — restarting always requires a new consent
+grant, which is why the status card asks you to tap Start again.
 
 If start keeps failing on your device:
 
