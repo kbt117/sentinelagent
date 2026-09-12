@@ -1,6 +1,7 @@
 package com.sentinelagent.debug
 
 import android.Manifest
+import android.app.Activity
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -90,12 +91,20 @@ class CaptureService : Service() {
     private var audioJob: Job? = null
     private var sensorJob: Job? = null
 
-    // Fires when the projection ends: user taps the system "stop casting"
+    // Set when the service stops for a reason the UI should explain (start
+    // failure, projection revoked). Carried into the ACTION_SERVICE_STOPPED
+    // broadcast from onDestroy() so the explanation is never lost.
+    private var stopReason: String? = null
+
+    // Fires when the projection ends: user taps the system "stop sharing"
     // chip, the device is locked (Android 15+), or the system revokes it.
+    // A dead MediaProjection token can NEVER be reused, and the old consent
+    // Intent cannot mint a new one — the user must tap Start again so
+    // MainActivity shows a fresh createScreenCaptureIntent() dialog.
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
-            Log.d(TAG, "MediaProjection stopped")
-            broadcastServiceState(ACTION_SERVICE_STATUS, "Screen capture ended")
+            Log.d(TAG, "MediaProjection stopped by system/user")
+            stopReason = getString(R.string.status_reconsent)
             stopSelf()
         }
     }
@@ -158,7 +167,9 @@ class CaptureService : Service() {
             micEnabled = intent.getBooleanExtra(EXTRA_MIC_ENABLED, false)
             sensorsEnabled = intent.getBooleanExtra(EXTRA_SENSORS_ENABLED, false)
 
-            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
+            // NOTE: Activity.RESULT_OK is -1, so the "missing" default MUST be
+            // RESULT_CANCELED — defaulting to -1 would reject every grant.
+            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
             @Suppress("DEPRECATION")
             val projectionData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent::class.java)
@@ -178,8 +189,17 @@ class CaptureService : Service() {
 
             // 2. Create the MediaProjection from the user-approved consent
             //    result. Must happen AFTER startForeground() on Android 14+.
-            if (resultCode == -1 || projectionData == null) {
-                throw IllegalStateException("Missing MediaProjection consent data")
+            //    This consent token is single-session: it is valid only in
+            //    this process and only for this start — never persist it
+            //    (no SharedPreferences, disk, or cross-restart statics).
+            //    Every new capture session needs a fresh
+            //    createScreenCaptureIntent() grant from MainActivity.
+            if (resultCode != Activity.RESULT_OK || projectionData == null) {
+                throw IllegalStateException(
+                    "Missing MediaProjection consent data " +
+                            "(resultCode=$resultCode, hasData=${projectionData != null}). " +
+                            "Fresh screen-capture consent is required for every session."
+                )
             }
             val projectionManager =
                 getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -195,10 +215,12 @@ class CaptureService : Service() {
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to start capture service", t)
             isRunning = false
-            broadcastServiceState(
-                ACTION_SERVICE_ERROR,
-                "Start failed: ${t.message ?: t.javaClass.simpleName}"
-            )
+            // Remember the message: onDestroy() will broadcast STOPPED right
+            // after this, and without stopReason it would wipe the error text
+            // back to a bare "Not running".
+            val message = "Start failed: ${t.message ?: t.javaClass.simpleName}"
+            stopReason = message
+            broadcastServiceState(ACTION_SERVICE_ERROR, message)
             stopSelf()
         }
     }
@@ -552,8 +574,11 @@ class CaptureService : Service() {
             Log.e(TAG, "Error releasing wake lock: ${e.message}")
         }
 
-        // Broadcast that service has stopped so MainActivity can update UI
-        broadcastServiceState(ACTION_SERVICE_STOPPED)
+        // Broadcast that service has stopped so MainActivity can update UI.
+        // stopReason preserves the explanation (start failure / projection
+        // revoked) so the UI never falls back to a bare "Not running".
+        broadcastServiceState(ACTION_SERVICE_STOPPED, stopReason)
+        stopReason = null
 
         Log.d(TAG, "CaptureService fully destroyed")
     }

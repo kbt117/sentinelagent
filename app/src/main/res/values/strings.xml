@@ -41,6 +41,7 @@
     <string name="status_running">Monitoring active</string>
     <string name="status_starting">Starting…</string>
     <string name="status_stopping">Stopping…</string>
+    <string name="status_reconsent">Screen capture ended — tap Start and accept the system dialog again to resume</string>
 
     <!-- Notification -->
     <string name="notification_title">SentinelAgent Monitoring</string>

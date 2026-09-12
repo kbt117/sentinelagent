@@ -11,6 +11,11 @@ import android.util.Log
 /**
  * Manages screen capture using MediaProjection and VirtualDisplay with ImageReader.
  *
+ * One manager (and its single VirtualDisplay) is bound to exactly one
+ * MediaProjection token for one capture session. When the projection ends,
+ * this manager is released and a NEW user consent is required — the old
+ * token can never create another VirtualDisplay.
+ *
  * @param mediaProjection   The MediaProjection instance from the permission grant
  * @param width             Screen width in pixels
  * @param height            Screen height in pixels
