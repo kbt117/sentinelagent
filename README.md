@@ -158,6 +158,38 @@ Content-Type: application/json
 
 ---
 
+## Troubleshooting
+
+The status card in the app now shows the real service state, and every start
+failure is reported there (in red) instead of crashing silently:
+
+| Status text | Meaning |
+|---|---|
+| `Starting…` | Consent granted, service start in progress |
+| `Monitoring active` | Foreground service is up and capture loops are running |
+| `Not running` | Service is stopped (or was never started) |
+| `Start failed: <message>` | The service could not start — the message is the actual exception (e.g. `Media projections require a foreground service...`) |
+| `Screen capture unavailable: <message>` | Service is running, but the screen VirtualDisplay could not be created (other captures continue) |
+| `Screen capture ended` | The projection was stopped by the system (cast chip, lock screen on Android 15+) |
+
+Android 14+ (targetSdk 34) requires this exact order: user accepts the
+**Share screen** dialog → `startForegroundService()` → the service calls
+`startForeground()` with `FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION` → only
+then `getMediaProjection()`. Any deviation throws `SecurityException`.
+
+If start keeps failing on your device:
+
+1. Make sure notifications are allowed for the app (Android 13+ shows a
+   permission prompt; the foreground service notification must be able to
+   appear).
+2. Disable battery optimization / "autostart" restrictions for the app —
+   aggressive OEM ROMs (MIUI, ColorOS, One UI) can revoke permissions or kill
+   the service right after start.
+3. Uninstall the old build completely before installing a new one, so stale
+   runtime-permission state is cleared.
+
+---
+
 ## Testing checklist
 
 - [ ] Grant runtime permissions on first run
